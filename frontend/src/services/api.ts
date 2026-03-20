@@ -1,9 +1,10 @@
 /**
  * API Service Layer
  * All backend calls go through this module.
- * Base URL is configured via NEXT_PUBLIC_API_URL env variable (defaults to localhost:8000).
+ * Base URL is configured via src/lib/config.ts → NEXT_PUBLIC_API_URL env var.
  */
 
+import { BASE_URL } from '@/lib/config';
 import type {
   Assignment,
   AssignmentDetail,
@@ -11,44 +12,44 @@ import type {
   ApiResponse,
 } from '@/types/assignment.types';
 
-const BASE_URL =
-  typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000')
-    : (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000');
-
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const url = `${BASE_URL}${path}`;
 
-  const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {}),
-    },
-    ...options,
-  });
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers ?? {}),
+      },
+      ...options,
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    // Try to parse JSON and extract the message field
-    try {
-      const errorJson = JSON.parse(errorText);
-      throw new Error(errorJson.message ?? errorText);
-    } catch (parseErr) {
-      // If not JSON, check if it's already a clean Error (from inner throw above)
-      if (parseErr instanceof Error && parseErr.message !== errorText) throw parseErr;
-      throw new Error(errorText || `Request failed: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      try {
+        const errorJson = JSON.parse(errorText);
+        throw new Error(errorJson.message ?? errorText);
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message !== errorText) throw parseErr;
+        throw new Error(
+          errorText || `Request failed: ${response.status} ${response.statusText}`
+        );
+      }
     }
-  }
 
-  return response.json() as Promise<ApiResponse<T>>;
+    return response.json() as Promise<ApiResponse<T>>;
+  } catch (err) {
+    console.error(`[API] ${options.method ?? 'GET'} ${url} →`, err);
+    throw err;
+  }
 }
 
-// ── Assignments ─────────────────────────────────────────────────────────────
+// ── Assignments ──────────────────────────────────────────────────────────────
 
-/** Fetch all assignments for the current user */
+/** Fetch all assignments */
 export async function getAssignments(): Promise<Assignment[]> {
   const res = await request<Assignment[]>('/api/assignments');
   return res.data;

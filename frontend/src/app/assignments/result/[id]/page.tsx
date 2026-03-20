@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { PdfButton } from '@/components/result/PdfButton';
+import { BASE_URL } from '@/lib/config';
 
 const PDF_ID = 'pdf-content';
 
@@ -77,8 +78,6 @@ interface AssignmentData {
   totalMarks?: number;
   totalQuestions?: number;
 }
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
 
 async function fetchAssignment(id: string): Promise<AssignmentData> {
   const res = await fetch(`${BASE_URL}/api/assignments/${id}`);
