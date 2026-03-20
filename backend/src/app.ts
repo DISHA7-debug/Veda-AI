@@ -7,17 +7,19 @@ const app: Application = express();
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
+import cors from "cors";
+
 app.use(
   cors({
     origin: [
-      process.env.CLIENT_URL || "http://localhost:3000",
       "http://localhost:3000",
+      "https://veda-ai-self.vercel.app"
     ],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
+app.options("*", cors());
 
 app.use(express.json());
 
