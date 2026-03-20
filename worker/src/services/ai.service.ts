@@ -1,60 +1,96 @@
-﻿import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 
-const getGenAI = () => {
-  const apiKey = (process.env.GEMINI_API_KEY ?? "").trim();
-  if (!apiKey) {
-    throw new Error(
-      "Missing GEMINI_API_KEY environment variable. Please set it in your .env or system environment."
-    );
-  }
-
-  // Log only a key prefix for debugging (never leak full keys in logs).
-  console.log("Using Gemini API key prefix:", apiKey.slice(0, 8), "...");
-
-  return new GoogleGenerativeAI(apiKey);
+// ─── Groq client (OpenAI-compatible) ─────────────────────────────────────────
+const getGroq = () => {
+  const apiKey = (process.env.GROQ_API_KEY ?? "").trim();
+  if (!apiKey) throw new Error("GROQ_API_KEY is not set in .env");
+  return new OpenAI({
+    apiKey,
+    baseURL: "https://api.groq.com/openai/v1",
+  });
 };
 
-export const generateQuestionPaper = async (assignment: any) => {
+// ─── Prompt builder ───────────────────────────────────────────────────────────
+const buildPrompt = (assignment: {
+  title: string;
+  numQuestions: number;
+  totalMarks: number;
+  questionTypes: string[];
+  instructions?: string;
+}) => `
+You are an expert teacher. Generate a complete question paper as a single valid JSON object.
+Return ONLY the raw JSON — no markdown, no backticks, no extra text.
+
+Assignment details:
+- Title: ${assignment.title}
+- Total Questions: ${assignment.numQuestions}
+- Total Marks: ${assignment.totalMarks}
+- Question Types: ${assignment.questionTypes.join(", ")}
+- Instructions: ${assignment.instructions ?? "All questions are compulsory."}
+
+Required JSON schema (return exactly this structure):
+{
+  "school": "Delhi Public School",
+  "subject": "${assignment.title}",
+  "className": "8th",
+  "timeAllowed": "40 minutes",
+  "maxMarks": ${assignment.totalMarks},
+  "instructions": "${assignment.instructions ?? "All questions are compulsory. Write neat and legible answers."}",
+  "questions": [
+    { "no": 1, "difficulty": "Easy", "text": "Full question text here [X Marks]", "marks": 2 }
+  ],
+  "answers": [
+    { "no": 1, "question": "Short label", "answer": "Concise answer here" }
+  ]
+}
+
+Rules:
+- Generate exactly ${assignment.numQuestions} questions
+- Each question needs: no, difficulty (Easy/Moderate/Hard/Challenging), text (with marks in brackets), marks
+- Each answer needs: no, question (short label), answer (clear explanation)
+- Difficulty spread: ~40% Easy, 30% Moderate, 20% Hard, 10% Challenging
+- Distribute marks proportionally to reach totalMarks = ${assignment.totalMarks}
+`;
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+export const generateQuestionPaper = async (assignment: any): Promise<any> => {
+  const groq = getGroq();
+  const prompt = buildPrompt(assignment);
+
+  console.log(`🤖 Calling Groq (llama-3.3-70b) for assignment: ${assignment.title}`);
+
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a professional teacher who creates exam question papers. Always respond with valid JSON only — no markdown, no code fences, no extra text.",
+      },
+      { role: "user", content: prompt },
+    ],
+    temperature: 0.7,
+    max_tokens: 4096,
+  });
+
+  const raw = completion.choices[0]?.message?.content ?? "";
+  console.log("📄 Raw AI response (first 200 chars):", raw.slice(0, 200));
+
+  // Strip markdown fences if the model adds them despite instructions
+  const jsonText = raw
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
   try {
-    const genAI = getGenAI();
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-    });
-
-    const prompt = `
-    Create a question paper:
-
-    Title: ${assignment.title}
-    Total Questions: ${assignment.numQuestions}
-    Marks: ${assignment.totalMarks}
-    Types: ${assignment.questionTypes.join(", ")}
-    Instructions: ${assignment.instructions}
-    `;
-
-    const result = await model.generateContent(prompt);
-
-    const response = await result.response;
-    const text = response.text();
-
-    console.log("✅ AI OUTPUT:", text);
-
-    return text;
-  } catch (error: any) {
-    // Provide a clearer hint if the API key is invalid.
-    if (
-      error?.status === 400 &&
-      Array.isArray(error?.errorDetails) &&
-      error.errorDetails.some((d: any) => d?.reason === "API_KEY_INVALID")
-    ) {
-      console.error(
-        "❌ Gemini API key is invalid or doesn't have Generative Language API enabled."
-      );
-      console.error(
-        "   → Make sure GEMINI_API_KEY is set to a valid key and the API is enabled in GCP console."
-      );
-    }
-
-    console.error("❌ AI ERROR:", error);
-    throw error;
+    const parsed = JSON.parse(jsonText);
+    console.log(
+      `✅ Paper generated: ${parsed.questions?.length ?? 0} questions`
+    );
+    return parsed;
+  } catch {
+    console.error("❌ JSON parse failed. Raw output:\n", raw);
+    throw new Error("AI returned invalid JSON. Raw: " + raw.slice(0, 300));
   }
 };

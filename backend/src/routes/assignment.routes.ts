@@ -1,10 +1,15 @@
 import { Router } from "express";
 
-import { createAssignment, getAssignmentById } from "../controllers/assignment.controller";
+import {
+  createAssignment,
+  getAssignments,
+  getAssignmentById,
+} from "../controllers/assignment.controller";
 
 const router: Router = Router();
 
-router.post("/", createAssignment);
-router.get("/:id", getAssignmentById);
+router.get("/", getAssignments);         // GET  /api/assignments
+router.post("/", createAssignment);      // POST /api/assignments
+router.get("/:id", getAssignmentById);   // GET  /api/assignments/:id
 
 export default router;
