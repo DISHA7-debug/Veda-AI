@@ -7,8 +7,6 @@ const app: Application = express();
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
-import cors from "cors";
-
 app.use(
   cors({
     origin: [
